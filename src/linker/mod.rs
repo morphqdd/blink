@@ -1,5 +1,6 @@
 use std::{fs, path::Path};
 
+use byteorder::{LittleEndian, WriteBytesExt};
 use goblin::{
     Object,
     elf::{Elf, sym::STB_GLOBAL},
@@ -26,22 +27,39 @@ impl Linker {
     }
     pub fn link<P: AsRef<Path>>(&mut self, objects: &[P]) -> anyhow::Result<()> {
         for path_to_obj in objects {
-            let buffer = fs::read(path_to_obj)?;
+            let buffer = fs::read(&path_to_obj)?;
             let obj = Object::parse(&buffer)?;
 
             match &obj {
                 Object::Elf(elf) => {
-                    self.add_elf(elf, &buffer)?;
+                    let out = self.add_elf(elf, &buffer)?;
+                    let path = path_to_obj
+                        .as_ref()
+                        .parent()
+                        .ok_or(anyhow::anyhow!("Is a root of path already!"))?;
+                    let name = path_to_obj
+                        .as_ref()
+                        .file_prefix()
+                        .ok_or(anyhow::anyhow!("File prefix not found!"))?;
+                    let out_path = path.join(&name);
+                    fs::write(&out_path, &out)?;
+
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let mut perm = fs::metadata(&out_path)?.permissions();
+                        perm.set_mode(0o755);
+                        fs::set_permissions(&out_path, perm)?;
+                    }
                 }
                 _ => unimplemented!(),
             }
         }
 
-        println!("{:?}", self);
         Ok(())
     }
 
-    fn add_elf(&mut self, elf: &Elf, buf: &[u8]) -> anyhow::Result<()> {
+    fn add_elf(&mut self, elf: &Elf, buf: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut text_shndx = None;
         for (i, sh) in elf.section_headers.iter().enumerate() {
             if let Some(name) = elf.shdr_strtab.get_at(sh.sh_name) {
@@ -120,20 +138,43 @@ impl Linker {
         elf_header[6] = 1; // EV_CURRENT
         out.extend_from_slice(&elf_header);
 
-        Ok(())
-    }
+        out.write_u16::<LittleEndian>(2)?; // e_type = ET_EXEC
+        out.write_u16::<LittleEndian>(62)?; // e_machine = EM_X86_64
+        out.write_u32::<LittleEndian>(1)?; // e_version
+        out.write_u64::<LittleEndian>(start_vaddr)?; // e_entry
+        out.write_u64::<LittleEndian>(64)?; // e_phoff (immediately after ELF header)
+        out.write_u64::<LittleEndian>(0)?; // e_shoff (We don't write section headers)
+        out.write_u32::<LittleEndian>(0)?; // e_flags 
+        out.write_u16::<LittleEndian>(64)?; // e_ehsize 
+        out.write_u16::<LittleEndian>(56)?; // e_phentsize 
+        out.write_u16::<LittleEndian>(1)?; // e_phnum 
+        out.write_u16::<LittleEndian>(0)?; // e_shentsize 
+        out.write_u16::<LittleEndian>(0)?; // e_shnum 
+        out.write_u16::<LittleEndian>(0)?; // e_shstrndx
 
-    // fn merge_sections(&mut self, elf: &Elf) -> goblin::error::Result<()> {
-    //     if let Some(sh) = elf
-    //         .section_headers
-    //         .iter()
-    //         .find(|sh| elf.shdr_strtab.get_at(sh.sh_name) == Some(".text"))
-    //     {
-    //         let (data, _) = elf.iter_note_sections;
-    //         self.text_data.extend_from_slice(data);
-    //     }
-    //     Ok(())
-    // }
+        //Program header (one PT_LOAD)
+        out.write_u32::<LittleEndian>(1)?; // p_type = PT_LOAD 
+        out.write_u32::<LittleEndian>(5)?; // p_flags = PF_R | PF_X 
+        out.write_u64::<LittleEndian>(file_text_offset)?; // p_offset in file 
+        out.write_u64::<LittleEndian>(start_vaddr)?; // p_vaddr 
+        out.write_u64::<LittleEndian>(start_vaddr)?; // p_paddr 
+        out.write_u64::<LittleEndian>(final_text.len() as u64)?; // p_filesz 
+        out.write_u64::<LittleEndian>(final_text.len() as u64)?; // p_memsz 
+        out.write_u64::<LittleEndian>(0x1000)?; // p_align
+
+        // Pad the file until file_text_offset (so that PT_LOAD p_offset points to this location)
+        if out.len() as u64 > file_text_offset {
+            return Err(anyhow::anyhow!(
+                "Headers exceed chosen file_text_offset; choose larger offset"
+            ));
+        }
+        out.resize(file_text_offset as usize, 0);
+
+        // Append the final text segment
+        out.extend_from_slice(&final_text);
+
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
