@@ -1,0 +1,8 @@
+[package]
+name = "blink"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+goblin = { version = "0.10.3" }
+anyhow = { version = "1" }
