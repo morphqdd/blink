@@ -179,13 +179,42 @@ impl Linker {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Command;
+
     use crate::linker::Linker;
 
     #[test]
-    fn load_simple_obj() {
+    fn link_simple_obj() {
+        assert!(
+            Command::new("gcc")
+                .args([
+                    "-c",
+                    "test_assets/simple_prog/main.c",
+                    "-o",
+                    "test_assets/simple_prog/main.o"
+                ])
+                .spawn()
+                .is_ok()
+        );
         assert!(
             Linker::new()
                 .link(&["test_assets/simple_prog/main.o"])
+                .is_ok()
+        );
+        assert_eq!(
+            Command::new("test_assets/simple_prog/main")
+                .status()
+                .unwrap()
+                .code(),
+            Some(20)
+        )
+    }
+
+    #[test]
+    fn link_simple_obj_with_add_operation() {
+        assert!(
+            Linker::new()
+                .link(&["test_assets/add_operation/main.o"])
                 .is_ok()
         )
     }
