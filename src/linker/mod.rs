@@ -193,11 +193,10 @@ mod tests {
         let mut filename = String::new();
         rand::random_iter()
             .take(5)
-            .into_iter()
             .for_each(|x: i32| filename.push_str(&x.to_string()));
         let c_path = dir.path().join(format!("{filename}.c"));
         let o_path = dir.path().join(format!("{filename}.o"));
-        let bin_path = dir.path().join(format!("{filename}"));
+        let bin_path = dir.path().join(&filename);
         assert!(
             fs::write(
                 &c_path,
@@ -230,11 +229,10 @@ mod tests {
         let mut filename = String::new();
         rand::random_iter()
             .take(5)
-            .into_iter()
             .for_each(|x: i32| filename.push_str(&x.to_string()));
         let c_path = dir.path().join(format!("{filename}.c"));
         let o_path = dir.path().join(format!("{filename}.o"));
-        let bin_path = dir.path().join(format!("{filename}"));
+        let bin_path = dir.path().join(&filename);
         assert!(
             fs::write(
                 &c_path,
