@@ -179,14 +179,85 @@ impl Linker {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, process::Command};
+
+    use tempfile::tempdir;
+
     use crate::linker::Linker;
 
     #[test]
-    fn load_simple_obj() {
+    fn link_simple_obj() {
+        let dir = tempdir().unwrap();
+        let mut filename = String::new();
+        rand::random_iter()
+            .take(5)
+            .into_iter()
+            .for_each(|x: i32| filename.push_str(&x.to_string()));
+        let c_path = dir.path().join(format!("{filename}.c"));
+        let o_path = dir.path().join(format!("{filename}.o"));
+        let bin_path = dir.path().join(format!("{filename}"));
         assert!(
-            Linker::new()
-                .link(&["test_assets/simple_prog/main.o"])
+            fs::write(
+                &c_path,
+                r"
+                int main() {
+                    return 20;
+                }
+            ",
+            )
+            .is_ok()
+        );
+        assert!(
+            Command::new("gcc")
+                .args([
+                    "-c",
+                    &c_path.to_string_lossy(),
+                    "-o",
+                    &o_path.to_string_lossy()
+                ])
+                .spawn()
                 .is_ok()
-        )
+        );
+        assert!(Linker::new().link(&[&o_path]).is_ok());
+        assert_eq!(Command::new(&bin_path).status().unwrap().code(), Some(20))
+    }
+
+    #[test]
+    fn link_simple_obj_with_add_operation() {
+        let dir = tempdir().unwrap();
+        let mut filename = String::new();
+        rand::random_iter()
+            .take(5)
+            .into_iter()
+            .for_each(|x: i32| filename.push_str(&x.to_string()));
+        let c_path = dir.path().join(format!("{filename}.c"));
+        let o_path = dir.path().join(format!("{filename}.o"));
+        let bin_path = dir.path().join(format!("{filename}"));
+        assert!(
+            fs::write(
+                &c_path,
+                r"
+                int main() {
+                    int a = 10;
+                    int b = 15;
+                    return a + b;
+                }
+            ",
+            )
+            .is_ok()
+        );
+        assert!(
+            Command::new("gcc")
+                .args([
+                    "-c",
+                    &c_path.to_string_lossy(),
+                    "-o",
+                    &o_path.to_string_lossy()
+                ])
+                .spawn()
+                .is_ok()
+        );
+        assert!(Linker::new().link(&[&o_path]).is_ok());
+        assert_eq!(Command::new(&bin_path).status().unwrap().code(), Some(25))
     }
 }
