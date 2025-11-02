@@ -1,4 +1,5 @@
 #[derive(Debug)]
+#[allow(unused)]
 pub struct SymbolInfo {
     pub name: String,
     pub address: u64,
