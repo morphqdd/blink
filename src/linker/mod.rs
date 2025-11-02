@@ -193,7 +193,7 @@ mod tests {
         let mut filename = String::new();
         rand::random_iter()
             .take(5)
-            .for_each(|x: i32| filename.push_str(&x.to_string()));
+            .for_each(|x: u8| filename.push_str(&x.to_string()));
         let c_path = dir.path().join(format!("{filename}.c"));
         let o_path = dir.path().join(format!("{filename}.o"));
         let bin_path = dir.path().join(&filename);
@@ -216,7 +216,7 @@ mod tests {
                     "-o",
                     &o_path.to_string_lossy()
                 ])
-                .spawn()
+                .status()
                 .is_ok()
         );
         assert!(Linker::new().link(&[&o_path]).is_ok());
@@ -229,7 +229,7 @@ mod tests {
         let mut filename = String::new();
         rand::random_iter()
             .take(5)
-            .for_each(|x: i32| filename.push_str(&x.to_string()));
+            .for_each(|x: u8| filename.push_str(&x.to_string()));
         let c_path = dir.path().join(format!("{filename}.c"));
         let o_path = dir.path().join(format!("{filename}.o"));
         let bin_path = dir.path().join(&filename);
@@ -254,7 +254,7 @@ mod tests {
                     "-o",
                     &o_path.to_string_lossy()
                 ])
-                .spawn()
+                .status()
                 .is_ok()
         );
         assert!(Linker::new().link(&[&o_path]).is_ok());
