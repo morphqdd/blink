@@ -1,20 +1,22 @@
 use std::{fs, path::Path};
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use goblin::{
-    Object,
-    elf::{Elf, sym::STB_GLOBAL},
-};
-
-use crate::linker::symbol::SymbolInfo;
+use goblin::{Object, elf::Elf};
 
 mod symbol;
 
 #[derive(Debug)]
+#[allow(unused)]
 pub struct Linker {
     symbol_table: Vec<symbol::SymbolInfo>,
     base_address: u64,
     text_data: Vec<u8>,
+}
+
+impl Default for Linker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Linker {
@@ -27,7 +29,7 @@ impl Linker {
     }
     pub fn link<P: AsRef<Path>>(&mut self, objects: &[P]) -> anyhow::Result<()> {
         for path_to_obj in objects {
-            let buffer = fs::read(&path_to_obj)?;
+            let buffer = fs::read(path_to_obj)?;
             let obj = Object::parse(&buffer)?;
 
             match &obj {
@@ -41,7 +43,7 @@ impl Linker {
                         .as_ref()
                         .file_prefix()
                         .ok_or(anyhow::anyhow!("File prefix not found!"))?;
-                    let out_path = path.join(&name);
+                    let out_path = path.join(name);
                     fs::write(&out_path, &out)?;
 
                     #[cfg(unix)]
@@ -62,11 +64,11 @@ impl Linker {
     fn add_elf(&mut self, elf: &Elf, buf: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut text_shndx = None;
         for (i, sh) in elf.section_headers.iter().enumerate() {
-            if let Some(name) = elf.shdr_strtab.get_at(sh.sh_name) {
-                if name == ".text" {
-                    text_shndx = Some(i);
-                    break;
-                }
+            if let Some(name) = elf.shdr_strtab.get_at(sh.sh_name)
+                && name == ".text"
+            {
+                text_shndx = Some(i);
+                break;
             }
         }
 
@@ -78,14 +80,14 @@ impl Linker {
 
         let mut main_offset_in_section = None;
         for sym in elf.syms.iter() {
-            if let Some(name) = elf.strtab.get_at(sym.st_name) {
-                if name == "main" {
-                    let sec_addr = text_sh.sh_addr as usize;
-                    let val = sym.st_value as usize;
-                    if sym.st_shndx == text_shndx {
-                        main_offset_in_section = Some(val.saturating_sub(sec_addr));
-                        break;
-                    }
+            if let Some(name) = elf.strtab.get_at(sym.st_name)
+                && name == "main"
+            {
+                let sec_addr = text_sh.sh_addr as usize;
+                let val = sym.st_value as usize;
+                if sym.st_shndx == text_shndx {
+                    main_offset_in_section = Some(val.saturating_sub(sec_addr));
+                    break;
                 }
             }
         }
@@ -191,11 +193,10 @@ mod tests {
         let mut filename = String::new();
         rand::random_iter()
             .take(5)
-            .into_iter()
-            .for_each(|x: i32| filename.push_str(&x.to_string()));
+            .for_each(|x: u8| filename.push_str(&x.to_string()));
         let c_path = dir.path().join(format!("{filename}.c"));
         let o_path = dir.path().join(format!("{filename}.o"));
-        let bin_path = dir.path().join(format!("{filename}"));
+        let bin_path = dir.path().join(&filename);
         assert!(
             fs::write(
                 &c_path,
@@ -215,7 +216,7 @@ mod tests {
                     "-o",
                     &o_path.to_string_lossy()
                 ])
-                .spawn()
+                .status()
                 .is_ok()
         );
         assert!(Linker::new().link(&[&o_path]).is_ok());
@@ -228,11 +229,10 @@ mod tests {
         let mut filename = String::new();
         rand::random_iter()
             .take(5)
-            .into_iter()
-            .for_each(|x: i32| filename.push_str(&x.to_string()));
+            .for_each(|x: u8| filename.push_str(&x.to_string()));
         let c_path = dir.path().join(format!("{filename}.c"));
         let o_path = dir.path().join(format!("{filename}.o"));
-        let bin_path = dir.path().join(format!("{filename}"));
+        let bin_path = dir.path().join(&filename);
         assert!(
             fs::write(
                 &c_path,
@@ -254,7 +254,7 @@ mod tests {
                     "-o",
                     &o_path.to_string_lossy()
                 ])
-                .spawn()
+                .status()
                 .is_ok()
         );
         assert!(Linker::new().link(&[&o_path]).is_ok());
