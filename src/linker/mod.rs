@@ -27,41 +27,42 @@ impl Linker {
             text_data: vec![],
         }
     }
-    pub fn link<P: AsRef<Path>>(&mut self, objects: &[P]) -> anyhow::Result<()> {
-        for path_to_obj in objects {
-            let buffer = fs::read(path_to_obj)?;
-            let obj = Object::parse(&buffer)?;
 
-            match &obj {
-                Object::Elf(elf) => {
-                    let out = self.add_elf(elf, &buffer)?;
-                    let path = path_to_obj
-                        .as_ref()
-                        .parent()
-                        .ok_or(anyhow::anyhow!("Is a root of path already!"))?;
-                    let name = path_to_obj
-                        .as_ref()
-                        .file_prefix()
-                        .ok_or(anyhow::anyhow!("File prefix not found!"))?;
-                    let out_path = path.join(name);
-                    fs::write(&out_path, &out)?;
+    pub fn link_file<P: AsRef<Path>>(&mut self, object: P) -> anyhow::Result<()> {
+        let path_to_obj = object;
+        let buffer = fs::read(&path_to_obj)?;
+        let out = self.link(&buffer)?;
+        let path = path_to_obj
+            .as_ref()
+            .parent()
+            .ok_or(anyhow::anyhow!("Is a root of path already!"))?;
+        let name = path_to_obj
+            .as_ref()
+            .file_prefix()
+            .ok_or(anyhow::anyhow!("File prefix not found!"))?;
+        let out_path = path.join(name);
+        fs::write(&out_path, &out)?;
 
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::PermissionsExt;
-                        let mut perm = fs::metadata(&out_path)?.permissions();
-                        perm.set_mode(0o755);
-                        fs::set_permissions(&out_path, perm)?;
-                    }
-                }
-                _ => unimplemented!(),
-            }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perm = fs::metadata(&out_path)?.permissions();
+            perm.set_mode(0o755);
+            fs::set_permissions(&out_path, perm)?;
         }
-
         Ok(())
     }
 
-    fn add_elf(&mut self, elf: &Elf, buf: &[u8]) -> anyhow::Result<Vec<u8>> {
+    pub fn link(&mut self, buffer: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let obj = Object::parse(buffer)?;
+
+        match &obj {
+            Object::Elf(elf) => self.finalize(elf, buffer),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn finalize(&mut self, elf: &Elf, buf: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut text_shndx = None;
         for (i, sh) in elf.section_headers.iter().enumerate() {
             if let Some(name) = elf.shdr_strtab.get_at(sh.sh_name)
@@ -209,7 +210,7 @@ mod tests {
             .is_ok()
         );
         assert!(
-            Command::new("gcc")
+            Command::new("clang")
                 .args([
                     "-c",
                     &c_path.to_string_lossy(),
@@ -219,7 +220,7 @@ mod tests {
                 .status()
                 .is_ok()
         );
-        assert!(Linker::new().link(&[&o_path]).is_ok());
+        assert!(Linker::new().link_file(&o_path).is_ok());
         assert_eq!(Command::new(&bin_path).status().unwrap().code(), Some(20))
     }
 
@@ -247,7 +248,7 @@ mod tests {
             .is_ok()
         );
         assert!(
-            Command::new("gcc")
+            Command::new("clang")
                 .args([
                     "-c",
                     &c_path.to_string_lossy(),
@@ -257,7 +258,7 @@ mod tests {
                 .status()
                 .is_ok()
         );
-        assert!(Linker::new().link(&[&o_path]).is_ok());
+        assert!(Linker::new().link_file(&o_path).is_ok());
         assert_eq!(Command::new(&bin_path).status().unwrap().code(), Some(25))
     }
 }

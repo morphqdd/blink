@@ -1,5 +1,5 @@
 use blink::linker::Linker;
 
 fn main() -> anyhow::Result<()> {
-    Linker::new().link(&["test_assets/simple_prog/main.o"])
+    Linker::new().link_file("test_assets/simple_prog/main.o")
 }
