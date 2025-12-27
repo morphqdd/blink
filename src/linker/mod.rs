@@ -57,9 +57,7 @@ impl Linker {
         let obj = Object::parse(buffer)?;
 
         match &obj {
-            Object::Elf(elf) => {
-                self.finalize(elf, buffer)
-            }
+            Object::Elf(elf) => self.finalize(elf, buffer),
             _ => unimplemented!(),
         }
     }
