@@ -54,11 +54,11 @@ impl Linker {
     }
 
     pub fn link(&mut self, buffer: &[u8]) -> anyhow::Result<Vec<u8>> {
-        let obj = Object::parse(&buffer)?;
+        let obj = Object::parse(buffer)?;
 
         match &obj {
             Object::Elf(elf) => {
-                return self.finalize(elf, &buffer);
+                self.finalize(elf, buffer)
             }
             _ => unimplemented!(),
         }
